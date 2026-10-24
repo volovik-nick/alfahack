@@ -1,9 +1,11 @@
 import { useRef, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import { useCabinet } from "@/lib/store";
+import { logout } from "@/lib/api";
+import { useApiConfig, useCabinet } from "@/lib/store";
 
 export function Shell({ children }: { children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
+  const config = useApiConfig();
   const token = useCabinet((state) => state.token);
   const reset = useCabinet((state) => state.reset);
 
@@ -13,6 +15,11 @@ export function Shell({ children }: { children: ReactNode }) {
     const box = node.getBoundingClientRect();
     node.style.setProperty("--mx", String((event.clientX - box.left) / box.width - 0.5));
     node.style.setProperty("--my", String((event.clientY - box.top) / box.height - 0.5));
+  }
+
+  function signOut() {
+    if (config.token) void logout(config).catch(() => undefined);
+    reset();
   }
 
   return (
@@ -32,7 +39,7 @@ export function Shell({ children }: { children: ReactNode }) {
           {token ? (
             <button
               type="button"
-              onClick={reset}
+              onClick={signOut}
               className="min-h-11 rounded-md border border-border px-3 text-sm text-muted"
             >
               Выйти

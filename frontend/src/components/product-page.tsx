@@ -34,11 +34,19 @@ export function ProductPage({ id }: { id: string }) {
           if (!cancelled) setMissing(true);
           return;
         }
-        const ranked = await rankProducts(config, {
-          profile_id: profile.id,
-          products: catalog.map((item) => item.id),
-        });
-        const row = readRanking(ranked.result)?.find((item) => item.productId === productId);
+        let scoreValue: number | null = null;
+        let noteValue = "";
+        try {
+          const ranked = await rankProducts(config, {
+            profile_id: profile.id,
+            products: catalog.map((item) => item.id),
+          });
+          const row = readRanking(ranked.result)?.find((item) => item.productId === productId);
+          scoreValue = row?.score ?? null;
+          noteValue = row?.note ?? "";
+        } catch {
+          scoreValue = null;
+        }
         void createEvent(config, {
           profile_id: profile.id,
           event_type: "product_view",
@@ -46,8 +54,8 @@ export function ProductPage({ id }: { id: string }) {
         }).catch(() => undefined);
         if (cancelled) return;
         setProduct(found);
-        setScore(row?.score ?? null);
-        setNote(row?.note ?? "");
+        setScore(scoreValue);
+        setNote(noteValue);
       } catch (reason) {
         if (!cancelled) setError(reason instanceof Error ? reason.message : "Продукт не открылся");
       }

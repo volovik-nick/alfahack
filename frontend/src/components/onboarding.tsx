@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { createProfile, login, register, uploadMetrics, type MetricItem } from "@/lib/api";
+import { createProfile, getMe, login, register, uploadMetrics, type MetricItem, type ProfileResponse } from "@/lib/api";
 import { useApiConfig, useCabinet } from "@/lib/store";
 import { cn } from "@/lib/cn";
 
@@ -81,7 +81,23 @@ function AuthStep() {
     try {
       const body = { email: email.trim(), password };
       const token = kind === "login" ? await login(config, body) : await register(config, body);
-      setSession({ token: token.access_token, email: body.email });
+      setSession({ token: token.access_token, email: body.email, password: body.password });
+      try {
+        const me = await getMe({ base: config.base, token: token.access_token });
+        if (me.profile) {
+          const profile: ProfileResponse = {
+            id: me.profile.id,
+            user_id: me.id,
+            industry: me.profile.industry,
+            revenue_band: me.profile.revenue_band,
+            employees: me.profile.employees,
+            goals: me.profile.goals,
+          };
+          useCabinet.getState().setProfile(profile);
+        }
+      } catch {
+        // /auth/me есть в текущем бэке; старый Swagger без него не должен ломать вход.
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Не удалось войти");
     } finally {
@@ -151,8 +167,9 @@ function AuthStep() {
 function ProfileStep() {
   const config = useApiConfig();
   const email = useCabinet((state) => state.email) ?? "";
+  const savedPassword = useCabinet((state) => state.password) ?? "";
   const setProfile = useCabinet((state) => state.setProfile);
-  const [password, setPassword] = useState("secret12");
+  const [password, setPassword] = useState(savedPassword);
   const [industry, setIndustry] = useState(INDUSTRIES[2]);
   const [band, setBand] = useState(BANDS[1]);
   const [employees, setEmployees] = useState("4");

@@ -34,20 +34,31 @@ export function Dashboard() {
     let cancelled = false;
     void (async () => {
       try {
-        const [dashboard, catalog] = await Promise.all([
-          getDashboard(config, profile.id),
-          listProducts(config),
-        ]);
-        const ranked = await rankProducts(config, {
-          profile_id: profile.id,
-          products: catalog.map((item) => item.id),
-        });
+        const dashboard = await getDashboard(config, profile.id);
+        let catalog: ProductResponse[] = [];
+        try {
+          catalog = await listProducts(config);
+        } catch {
+          catalog = [];
+        }
+        let rankedRows: RankRow[] | null = null;
+        if (catalog.length) {
+          try {
+            const ranked = await rankProducts(config, {
+              profile_id: profile.id,
+              products: catalog.map((item) => item.id),
+            });
+            rankedRows = readRanking(ranked.result);
+          } catch {
+            rankedRows = null;
+          }
+        }
         void createEvent(config, { profile_id: profile.id, event_type: "dashboard_view" }).catch(() => undefined);
         if (cancelled) return;
         setSummary(readSummary(dashboard.summary));
         setIndex(dashboard.stability_index);
         setProducts(catalog);
-        setRows(readRanking(ranked.result));
+        setRows(rankedRows);
       } catch (reason) {
         if (!cancelled) setError(reason instanceof Error ? reason.message : "Дашборд не загрузился");
       }
@@ -71,7 +82,18 @@ export function Dashboard() {
       ]
     : products.map((product) => ({ product, row: null as RankRow | null }));
 
-  const tone = index == null ? "Считаем" : index >= 70 ? "Устойчивый" : index >= 45 ? "Рабочий" : "Хрупкий";
+  const tone =
+    index == null
+      ? "Считаем"
+      : index >= 0 && index <= 100
+        ? index >= 70
+          ? "Устойчивый"
+          : index >= 45
+            ? "Рабочий"
+            : "Хрупкий"
+        : index > 0
+          ? "Положительный поток"
+          : "Хрупкий";
   const flow = metrics.reduce((sum, item) => sum + item.cash_flow, 0) / (metrics.length || 1);
   const revenue = metrics.reduce((sum, item) => sum + item.revenue, 0) / (metrics.length || 1);
 
@@ -84,7 +106,9 @@ export function Dashboard() {
             {profile.industry ? ` · ${profile.industry}` : ""}
           </p>
           <div className="mt-3 flex items-end gap-4">
-            <p className="num text-6xl font-medium leading-none text-primary">{index ?? "—"}</p>
+            <p className="num text-4xl font-medium leading-none text-primary sm:text-6xl">
+              {index == null ? "—" : Math.abs(index) > 100 ? rub(index) : String(Math.round(index))}
+            </p>
             <div>
               <p className="text-lg font-semibold">{tone} профиль</p>
               <p className="text-sm text-muted">индекс устойчивости</p>
@@ -158,8 +182,9 @@ export function Dashboard() {
           <h2 className="text-lg font-semibold">Продукты</h2>
           <p className="text-sm text-muted">Порядок — насколько продукт подходит вашему профилю.</p>
         </div>
-        <ul className="grid gap-3">
-          {ordered.map(({ product, row }, position) => (
+        {ordered.length ? (
+          <ul className="grid gap-3">
+            {ordered.map(({ product, row }, position) => (
             <li key={product.id}>
               <Link
                 to="/product/$id"
@@ -186,7 +211,10 @@ export function Dashboard() {
               </Link>
             </li>
           ))}
-        </ul>
+          </ul>
+        ) : (
+          <p className="text-sm text-muted">В каталоге пока нет продуктов — ранжировать нечего.</p>
+        )}
       </section>
     </div>
   );
